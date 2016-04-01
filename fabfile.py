@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 from fabric.api import local
-import pathlib
 from os import path
 
 ### globals
