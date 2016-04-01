@@ -10,7 +10,9 @@
 #
 
 import bs4
-import fileinput
+import io
+import plac
+import sys
 
 class TigerXMLFormatter:
     def __init__( self, indent = '  ' ):
@@ -63,14 +65,14 @@ class TigerXMLFormatter:
         fstrs.append('%s</graph>' % (1*self.indent,))
         fstrs.append('</s>')
 
-        return '\n'.join(fstrs)
+        return u'\n'.join(fstrs)
 
     def format_header( header ):
         pass
 
 
 class Changes:
-    def __init__( self, files ):
+    def __init__( self, rulestream ):
         self.attachments = {}
         self.poscat = {}
         self.edgelabels = {}
@@ -84,7 +86,7 @@ class Changes:
         self.newforms = {}
         self.newroots = {}
         
-        for line in fileinput.input(files,openhook=fileinput.hook_encoded('iso-8859-1')):
+        for line in rulestream:
             line = line.partition('%')[0].strip().replace("'",'') # to get rid of prolog comments and string markers
             if line.startswith('correct_attachment'):
                 rule = self.make_rule(line)
@@ -258,35 +260,34 @@ class Changes:
         return '.'.join(map(lambda x: node[x], self.morphcombinations[node['pos']]))
 
 
-        
+@plac.annotations(
+    infile = ("Input file in TiGer xml"),
+    outfile = ("The file to write the corrected version to"),
+    correctionfile = ("The file that holds the corrections to apply"),
+    inputenc = ("The encoding of the input file (default: utf-8)", "positional", None, str, ['utf-8','iso-8859-1']),
+    )
+def main(infile, outfile, correctionfile, inputenc='utf-8'):
+    with io.open(infile,'r',encoding=inputenc) as infile_:
+        corpus = bs4.BeautifulSoup(infile_,'lxml')
 
-### MAIN ###
-if __name__ == "__main__":
-    import sys
-    import codecs
+    with io.open(outfile,'w',encoding=inputenc) as outfile_:
+        # copy the header
+        with io.open(infile,'r',encoding=inputenc) as infile_:
+            for line in infile_:
+                if line.strip().startswith('<body>'):
+                    break
+                outfile_.write(line)
+        # apply changes to sentences
+        outfile_.write(u'<body>')
+        with io.open(correctionfile,'r',encoding='iso-8859-1') as correctionfile_:
+            changes = Changes(correctionfile_)
+        f = TigerXMLFormatter()
+        for sentence in corpus.find_all('s'):
+            changes.apply_changes(sentence,corpus)
+            outfile_.write(f.format_sentence(sentence))
+        outfile_.write(u'</body>')
+        outfile_.write(u'</corpus>')
 
-    encoding = 'iso-8859-1' if sys.argv[1] == 'latin1' else 'utf-8'
 
-    sys.stdout = codecs.getwriter(encoding)(sys.stdout)
-
-    corpus = bs4.BeautifulSoup(open(sys.argv[2],'r'),'lxml')
-
-    # copy the header
-    for line in codecs.open(sys.argv[2],'r',encoding):
-        if line.strip().startswith('<body>'):
-            break
-        print line,
-    
-    # apply changes to sentences
-    print '<body>'
-    changes = Changes(sys.argv[3:])
-    f = TigerXMLFormatter()
-    for sentence in corpus.find_all('s'):        
-        print >> sys.stderr, 'applying correction to sentence', sentence['id'][1:].partition('_')[0], '\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b',
-        changes.apply_changes(sentence,corpus)
-        print f.format_sentence(sentence)
-    print >> sys.stderr
-    print '</body>'
-    print '</corpus>'
-        
-    
+if __name__ == '__main__':
+    plac.call(main)

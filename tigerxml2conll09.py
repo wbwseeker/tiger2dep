@@ -16,17 +16,16 @@ import psnode
 import dependencyconverter
 from collections import defaultdict
 
-sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
-
 # This class is code I modified from Gerlof Bouma's tgxml2pl.py from QPL (which he modified from my code ;)
 class Tiger2DepHandler( xml.sax.handler.ContentHandler ):
     """
     This class implements a handler for the sax parser that reads in the Tiger xml
     sentence by sentence and converts it to dependency format.
     """
-    def __init__( self, converter, datasource ):
+    def __init__( self, converter, datasource, outstream ):
         self.datasource = datasource
         self.converter = converter
+        self.outstream = outstream
         self.sid = 0
         self.root = u''
         self.phrases = {}
@@ -100,8 +99,10 @@ class Tiger2DepHandler( xml.sax.handler.ContentHandler ):
             if self.datasource == 'smultron':
                 self.replace_HD(sentence)
                 self.remove_html(sentence)
-    	    print '\n'.join(map(lambda x: x + '\t_\t_', map(unicode,sentence)))
-    	    print
+            # print '\n'.join(map(lambda x: x + '\t_\t_', map(unicode,sentence)))
+            # print
+            self.outstream.write(u'\n'.join(map(lambda x: x + '\t_\t_', map(unicode,sentence))))
+            self.outstream.write(u'\n\n')            
 
     def nodes2list(self):
         "converts the last sentence to a list format"
@@ -168,9 +169,11 @@ class Tiger2DepHandler( xml.sax.handler.ContentHandler ):
 
 ### MAIN ###
 import argparse
+import io
 
 argpar = argparse.ArgumentParser(description='Converts TiGer to dependency format')
 argpar.add_argument('-i','--input',dest='inputfile',help='the TiGerXML file version 2.1 (Release August 2006)',required=True)
+argpar.add_argument('-o','--output',dest='outputfile',help='the output file',required=True)
 argpar.add_argument('-m','--manual-heads',dest='headsfile',help='the file that specifies the heads that were selected manually',required=True)
 argpar.add_argument('-p','--punctuation',dest='punctuation',choices=['deepest-common-ancestor','easy'],default='deepest-common-ancestor',help='set the way, punctuation is attached (default: highest-common-ancestor)')
 argpar.add_argument('-c','--coordination',dest='coordination',choices=['chain','bush'],default='chain',help='set the way, coordination is annotated (default: chain)')
@@ -178,10 +181,11 @@ argpar.add_argument('-e','--ellipsis',dest='ellipsis',choices=['resolve','keep']
 argpar.add_argument('-d','--data',dest='datasource',choices=['tiger','smultron','europarl'],required=True,help='define data source')
 args = argpar.parse_args()
 
-depconv = dependencyconverter.DependencyConverter(args.headsfile,punctuation=args.punctuation,coordination=args.coordination,ellipsis=args.ellipsis,datasource=args.datasource)
-parser = xml.sax.make_parser()
-parser.setContentHandler(Tiger2DepHandler(depconv,args.datasource))
-parser.parse(args.inputfile)
+with io.open(args.outputfile,'w',encoding='utf-8') as outfile_:
+    depconv = dependencyconverter.DependencyConverter(args.headsfile,punctuation=args.punctuation,coordination=args.coordination,ellipsis=args.ellipsis,datasource=args.datasource)
+    parser = xml.sax.make_parser()
+    parser.setContentHandler(Tiger2DepHandler(depconv,args.datasource,outfile_))
+    parser.parse(args.inputfile)
 
 
 
